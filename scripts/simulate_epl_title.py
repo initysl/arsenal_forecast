@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
 import joblib
-from src.features.team_strength import calculate_team_strength
 
-# Load model and team strength
+# Load model
 model = joblib.load('outputs/models/match_predictor.pkl')
-team_strength = pd.read_csv('outputs/models/team_strength.csv', index_col=0)
+
+# Use CURRENT season strength instead of historical
+team_strength = pd.read_csv('outputs/models/current_season_strength.csv', index_col=0)
 
 # Load Arsenal fixtures
 arsenal_fixtures = pd.read_csv('data/raw/arsenal_epl_2025_26.csv')
@@ -19,33 +20,43 @@ city_fixtures.columns = city_fixtures.columns.str.strip()
 ARSENAL_CURRENT = 70
 CITY_CURRENT = 67
 
-print("="*60)
+print("-"*60)
 print("PREMIER LEAGUE TITLE RACE SIMULATION")
-print("="*60)
+print("-"*60)
 print(f"\nCurrent Standings:")
 print(f"Arsenal:   {ARSENAL_CURRENT} points (5 games left)")
 print(f"Man City:  {CITY_CURRENT} points (6 games left)")
-print(f"\nMax possible: Arsenal 85 pts, Man City 85 pts")
+print(f"\nCurrent form (pts/game):")
+print(f"Arsenal:   {team_strength.loc['Arsenal', 'avg_points']:.2f}")
+print(f"Man City:  {team_strength.loc['Man City', 'avg_points']:.2f}")
 
 # Get upcoming fixtures
 arsenal_upcoming = arsenal_fixtures[arsenal_fixtures['Result'].isna()].copy()
 city_upcoming = city_fixtures[city_fixtures['Result'].isna()].copy()
 
 print(f"\nArsenal remaining fixtures:")
-print(arsenal_upcoming[['Date', 'Home Team', 'Away Team']])
+for _, match in arsenal_upcoming.iterrows():
+    opp = match['Away Team'] if match['Home Team'] == 'Arsenal' else match['Home Team']
+    loc = 'H' if match['Home Team'] == 'Arsenal' else 'A'
+    opp_str = team_strength.loc[opp, 'avg_points'] if opp in team_strength.index else 1.0
+    print(f"  {loc} vs {opp:15s} (strength: {opp_str:.2f})")
 
 print(f"\nMan City remaining fixtures:")
-print(city_upcoming[['Date', 'Home Team', 'Away Team']])
+for _, match in city_upcoming.iterrows():
+    opp = match['Away Team'] if match['Home Team'] == 'Man City' else match['Home Team']
+    loc = 'H' if match['Home Team'] == 'Man City' else 'A'
+    opp_str = team_strength.loc[opp, 'avg_points'] if opp in team_strength.index else 1.0
+    print(f"  {loc} vs {opp:15s} (strength: {opp_str:.2f})")
 
 # Function to predict match probabilities
 def predict_match_probs(home_team, away_team, model, team_strength):
-    """Predict win/draw/loss probabilities"""
+    """Predict win/draw/loss probabilities using CURRENT season strength"""
     
-    # Get team strengths (default to 1.5 if missing)
+    # Get current season strengths
     home_str = team_strength.loc[home_team, 'avg_points'] if home_team in team_strength.index else 1.5
     away_str = team_strength.loc[away_team, 'avg_points'] if away_team in team_strength.index else 1.5
     
-    # Simple form estimate (use strength as proxy)
+    # Use current season form
     home_form = home_str
     away_form = away_str
     
@@ -60,15 +71,16 @@ def predict_match_probs(home_team, away_team, model, team_strength):
     }])
     
     probs = model.predict_proba(features)[0]
-    
-    # Return as dict {D, L, W}
     return dict(zip(model.classes_, probs))
 
 # Monte Carlo simulation
 N_SIMS = 10000
 arsenal_wins = 0
 city_wins = 0
-draws = 0
+ties = 0
+
+arsenal_points_dist = []
+city_points_dist = []
 
 for sim in range(N_SIMS):
     arsenal_points = ARSENAL_CURRENT
@@ -82,19 +94,17 @@ for sim in range(N_SIMS):
         probs = predict_match_probs(home, away, model, team_strength)
         outcome = np.random.choice(['D', 'L', 'W'], p=[probs.get('D', 0), probs.get('L', 0), probs.get('W', 0)])
         
-        # Points from home team perspective
         if outcome == 'W':
-            pts = 3
+            pts_home = 3
         elif outcome == 'D':
-            pts = 1
+            pts_home = 1
         else:
-            pts = 0
+            pts_home = 0
         
-        # Add points to Arsenal
         if home == 'Arsenal':
-            arsenal_points += pts
+            arsenal_points += pts_home
         else:
-            arsenal_points += (3 - pts if outcome == 'L' else (1 if outcome == 'D' else 0))
+            arsenal_points += (3 - pts_home)
     
     # Simulate Man City fixtures
     for _, match in city_upcoming.iterrows():
@@ -105,17 +115,19 @@ for sim in range(N_SIMS):
         outcome = np.random.choice(['D', 'L', 'W'], p=[probs.get('D', 0), probs.get('L', 0), probs.get('W', 0)])
         
         if outcome == 'W':
-            pts = 3
+            pts_home = 3
         elif outcome == 'D':
-            pts = 1
+            pts_home = 1
         else:
-            pts = 0
+            pts_home = 0
         
-        # Add points to Man City
         if home == 'Man City':
-            city_points += pts
+            city_points += pts_home
         else:
-            city_points += (3 - pts if outcome == 'L' else (1 if outcome == 'D' else 0))
+            city_points += (3 - pts_home)
+    
+    arsenal_points_dist.append(arsenal_points)
+    city_points_dist.append(city_points)
     
     # Determine winner
     if arsenal_points > city_points:
@@ -123,12 +135,16 @@ for sim in range(N_SIMS):
     elif city_points > arsenal_points:
         city_wins += 1
     else:
-        draws += 1
+        ties += 1
 
 # Results
-print("\n" + "="*60)
+print("\n" + "-"*60)
 print("SIMULATION RESULTS (10,000 runs)")
-print("="*60)
+print("-"*60)
 print(f"\nArsenal wins title: {arsenal_wins/N_SIMS*100:.1f}%")
 print(f"Man City wins title: {city_wins/N_SIMS*100:.1f}%")
-print(f"Finish level on points: {draws/N_SIMS*100:.1f}%")
+print(f"Finish level on points: {ties/N_SIMS*100:.1f}%")
+
+print(f"\nExpected final points:")
+print(f"Arsenal:  {np.mean(arsenal_points_dist):.1f} ± {np.std(arsenal_points_dist):.1f}")
+print(f"Man City: {np.mean(city_points_dist):.1f} ± {np.std(city_points_dist):.1f}")
