@@ -74,40 +74,53 @@ def predict_match_probs(home_team, away_team, model, team_strength):
     return dict(zip(model.classes_, probs))
 
 print(f"\nArsenal match-by-match probabilities:")
-
 for _, match in arsenal_upcoming.iterrows():
     home = match['Home Team']
     away = match['Away Team']
     probs = predict_match_probs(home, away, model, team_strength)
     
-    loc = 'H' if home == 'Arsenal' else 'A'
-    opp = away if home == 'Arsenal' else home
+    is_arsenal_home = (home == 'Arsenal')
+    loc = 'H' if is_arsenal_home else 'A'
+    opp = away if is_arsenal_home else home
     
-    # Expected points
-    exp_pts = probs.get('W', 0) * 3 + probs.get('D', 0) * 1
-    if home != 'Arsenal':  # Arsenal is away, so W/L are flipped
-        exp_pts = probs.get('L', 0) * 3 + probs.get('D', 0) * 1
+    # W/D/L from HOME team perspective, convert to Arsenal perspective
+    if is_arsenal_home:
+        arsenal_win_prob = probs.get('W', 0)
+        draw_prob = probs.get('D', 0)
+        arsenal_loss_prob = probs.get('L', 0)
+    else:
+        arsenal_win_prob = probs.get('L', 0)  # Home loss = Arsenal win
+        draw_prob = probs.get('D', 0)
+        arsenal_loss_prob = probs.get('W', 0)  # Home win = Arsenal loss
     
-    print(f"  {loc} vs {opp:15s} | W: {probs.get('W', 0)*100:4.1f}%  D: {probs.get('D', 0)*100:4.1f}%  L: {probs.get('L', 0)*100:4.1f}% | Exp pts: {exp_pts:.2f}")
+    exp_pts = arsenal_win_prob * 3 + draw_prob * 1
+    
+    print(f"  {loc} vs {opp:15s} | W: {arsenal_win_prob*100:4.1f}%  D: {draw_prob*100:4.1f}%  L: {arsenal_loss_prob*100:4.1f}% | Exp pts: {exp_pts:.2f}")
 
 print(f"\nMan City match-by-match probabilities:")
-
 for _, match in city_upcoming.iterrows():
     home = match['Home Team']
     away = match['Away Team']
     probs = predict_match_probs(home, away, model, team_strength)
     
-    loc = 'H' if home == 'Man City' else 'A'
-    opp = away if home == 'Man City' else home
+    is_city_home = (home == 'Man City')
+    loc = 'H' if is_city_home else 'A'
+    opp = away if is_city_home else home
     
-    exp_pts = probs.get('W', 0) * 3 + probs.get('D', 0) * 1
-    if home != 'Man City':
-        exp_pts = probs.get('L', 0) * 3 + probs.get('D', 0) * 1
+    if is_city_home:
+        city_win_prob = probs.get('W', 0)
+        draw_prob = probs.get('D', 0)
+        city_loss_prob = probs.get('L', 0)
+    else:
+        city_win_prob = probs.get('L', 0)
+        draw_prob = probs.get('D', 0)
+        city_loss_prob = probs.get('W', 0)
     
-    print(f"  {loc} vs {opp:15s} | W: {probs.get('W', 0)*100:4.1f}%  D: {probs.get('D', 0)*100:4.1f}%  L: {probs.get('L', 0)*100:4.1f}% | Exp pts: {exp_pts:.2f}")
+    exp_pts = city_win_prob * 3 + draw_prob * 1
+    
+    print(f"  {loc} vs {opp:15s} | W: {city_win_prob*100:4.1f}%  D: {draw_prob*100:4.1f}%  L: {city_loss_prob*100:4.1f}% | Exp pts: {exp_pts:.2f}")
 
-    
-# Monte Carlo simulation
+ # Monte Carlo simulation
 N_SIMS = 10000
 arsenal_wins = 0
 city_wins = 0
@@ -128,17 +141,20 @@ for sim in range(N_SIMS):
         probs = predict_match_probs(home, away, model, team_strength)
         outcome = np.random.choice(['D', 'L', 'W'], p=[probs.get('D', 0), probs.get('L', 0), probs.get('W', 0)])
         
-        if outcome == 'W':
-            pts_home = 3
-        elif outcome == 'D':
-            pts_home = 1
-        else:
-            pts_home = 0
-        
+        # outcome is from HOME team perspective
+        # Convert to Arsenal's points
         if home == 'Arsenal':
-            arsenal_points += pts_home
-        else:
-            arsenal_points += (3 - pts_home)
+            if outcome == 'W':
+                arsenal_points += 3
+            elif outcome == 'D':
+                arsenal_points += 1
+            # else: loss, add 0
+        else:  # Arsenal is away
+            if outcome == 'L':  # Home loss = Arsenal win
+                arsenal_points += 3
+            elif outcome == 'D':
+                arsenal_points += 1
+            # else: home win = Arsenal loss, add 0
     
     # Simulate Man City fixtures
     for _, match in city_upcoming.iterrows():
@@ -148,17 +164,16 @@ for sim in range(N_SIMS):
         probs = predict_match_probs(home, away, model, team_strength)
         outcome = np.random.choice(['D', 'L', 'W'], p=[probs.get('D', 0), probs.get('L', 0), probs.get('W', 0)])
         
-        if outcome == 'W':
-            pts_home = 3
-        elif outcome == 'D':
-            pts_home = 1
-        else:
-            pts_home = 0
-        
         if home == 'Man City':
-            city_points += pts_home
-        else:
-            city_points += (3 - pts_home)
+            if outcome == 'W':
+                city_points += 3
+            elif outcome == 'D':
+                city_points += 1
+        else:  # City is away
+            if outcome == 'L':
+                city_points += 3
+            elif outcome == 'D':
+                city_points += 1
     
     arsenal_points_dist.append(arsenal_points)
     city_points_dist.append(city_points)
