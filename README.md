@@ -1,6 +1,6 @@
 # Arsenal Forecast
 
-A small football forecasting project for Arsenal EPL and UCL title race title race.
+A small football forecasting project for Arsenal EPL and UCL title race title race. This project was written as at matcday 33 for Arsenal and matchday  33 for Manchester City.
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Static Badge](https://img.shields.io/badge/Machine%20Learning)
