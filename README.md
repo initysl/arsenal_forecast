@@ -2,6 +2,8 @@
 
 A small football forecasting project for Arsenal EPL and UCL title race title race.
 
+![Demo](outputs/figures/season_forecast.png)
+
 It does two things:
 
 - trains a simple match outcome model from historical EPL data
