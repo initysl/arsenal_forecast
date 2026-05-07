@@ -2,6 +2,9 @@
 
 A small football forecasting project for Arsenal EPL and UCL title race title race.
 
+![Python](https://img.shields.io/badge/Python-3.11-blue)
+![Static Badge](https://img.shields.io/badge/Machine%20Learning)
+
 ![Demo](outputs/figures/season_forecast.png)
 
 It does two things:
